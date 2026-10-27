@@ -1,0 +1,10 @@
+# 临时文件和与课程公开材料无关的本地文件
+*.tmp
+*.bak
+*.zip
+~$*
+Thumbs.db
+.DS_Store
+.env
+.env.*
+/private/
