@@ -1,0 +1,89 @@
+@startuml
+title UML 组件图 · 校园二手交易系统
+left to right direction
+
+skinparam defaultFontName Microsoft YaHei
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam backgroundColor #FFFFFF
+skinparam componentStyle rectangle
+skinparam nodesep 33
+skinparam ranksep 48
+skinparam ArrowColor #52657B
+skinparam component {
+  BackgroundColor #EDF4FA
+  BorderColor #52657B
+  FontColor #20344B
+}
+skinparam package {
+  BackgroundColor #F7FAFD
+  BorderColor #98ADC2
+  FontColor #20344B
+}
+skinparam database {
+  BackgroundColor #EBF6EE
+  BorderColor #6E9779
+  FontColor #20344B
+}
+
+component "浏览器界面\n游客／买卖双方／管理员" as Web
+
+package "应用服务 · 模块化单体" {
+  component "应用入口\n接收请求、路由与错误反馈" as Entry
+
+  package "业务模块" {
+    component "账号与权限\n注册登录、管理员创建、授权" as Access
+    component "商品目录\n草稿、送审、编辑、下架与筛选" as Catalog
+    component "预约与交易\n预约、确认、取消与完成" as Trade
+    component "审核与治理\n审核、举报、违规与整改申诉" as Governance
+    component "业务统计\n卖家与平台各自统计范围" as Stats
+  }
+
+  component "定时任务\n待确认满 24 小时取消\n已确认满 10 天完成" as Scheduler
+  component "站内通知\n投递去重、本人通知查询" as Notify
+  component "操作日志\n成功／失败留痕、按权查询" as Log
+  component "商品写入协调\n按商品接收序处理\n授权、版本及当前状态复核" as ProductWrite
+}
+
+database "SQLite 关系库 · 单机默认\n账号、商品、预约、治理、日志\n防重结果、通知事件与消息" as DB
+component "图片存储\n以文件引用关联商品" as Images
+
+Web --> Entry : 请求／结果
+Entry --> Access : 会话与身份
+Entry --> Catalog
+Entry --> Trade
+Entry --> Governance
+Entry --> Stats
+Entry --> Notify
+Entry --> Log : 历史查询／鉴权失败
+
+Catalog --> ProductWrite : 商品写入
+Trade --> ProductWrite : 预约状态转换
+Governance --> ProductWrite : 审核／违规联动
+Scheduler --> Trade : 到期动作
+Catalog --> Images : 图片读写
+
+Access --> DB : 账号与权限
+Catalog --> DB : 权限范围内查询
+Stats --> DB : 汇总已提交数据
+ProductWrite --> DB : 同一事务提交
+Notify --> DB : 读取已提交事件并去重投递
+Log --> DB : 查询与失败留痕
+ProductWrite ..> Log : 回滚后独立记录失败
+
+note bottom of Entry
+  服务端入口为商品写请求建立接收序。
+  身份、数据归属与操作权限均由服务端校验。
+end note
+
+note bottom of ProductWrite
+  商品、预约、关联治理结果与成功日志同一事务。
+  已处理请求结果及需投递的通知事件随事务保存。
+  保存失败整体回滚，失败日志独立提交。
+end note
+
+legend bottom
+  模块使用通用关系模型，单机原型默认 SQLite。
+  查询性能、安全与并发可靠性由 REQ-033–035 的验收场景验证。
+endlegend
+@enduml

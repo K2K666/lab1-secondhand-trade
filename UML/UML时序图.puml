@@ -1,0 +1,77 @@
+@startuml
+title 双买家预约同一商品时序图
+caption 需求依据 REQ-017、REQ-023～025、REQ-027～028、REQ-030、REQ-035
+
+skinparam defaultFontName Microsoft YaHei
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam backgroundColor #FFFFFF
+skinparam ArrowColor #456379
+skinparam sequence {
+  ParticipantBackgroundColor #EAF4FA
+  ParticipantBorderColor #456379
+  ParticipantFontColor #193247
+  LifeLineBorderColor #A4B4C0
+  GroupBorderColor #90A5B4
+  GroupBackgroundColor #F1F6F9
+}
+skinparam note {
+  BackgroundColor #F8FAFC
+  BorderColor #A4B4C0
+  FontColor #193247
+}
+hide footbox
+
+actor "买家 A" as BuyerA
+actor "买家 B" as BuyerB
+boundary "应用入口" as Entry
+control "预约服务与商品写入协调" as Service
+database "业务存储" as Store
+
+BuyerA -> Entry : 发起预约（商品、所见版本、请求键 A）
+BuyerB -> Entry : 发起预约（同一商品、所见版本、请求键 B）
+Entry -> Entry : 服务端入口为同商品请求分配接收序，示例中 A 先于 B
+Entry -> Entry : 验证登录身份、角色权限与请求归属
+note over Entry, Service
+  未授权请求拒绝并记失败日志。其他同商品写操作使用同一接收序。
+end note
+
+loop 按商品接收序处理通过鉴权的请求（A，随后 B）
+  Entry -> Service : 处理当前请求
+  Service -> Store : 开启写事务，复核权限后按账号 ID、动作、请求键查询
+  Store --> Service : 原结果、关联目标及参数摘要，或无记录
+  alt 同键且目标及参数摘要一致
+    Service -> Store : 结束事务，不改业务数据
+    Service --> Entry : 返回原结果（沿用原预约编号）
+  else 同键但商品／预约目标或参数摘要不符
+    Service -> Store : 结束事务，独立记失败日志
+    Service --> Entry : 拒绝复用请求键
+  else 新请求或上次写入失败且未提交
+    Service -> Store : 在写事务内重读商品状态、版本及有效预约
+    Store --> Service : 当前商品与预约数据
+    alt 商品仍可预约且页面信息有效
+      Service -> Store : 创建“待卖家确认”预约，商品转为“已被预约”\n更新版本，保存防重结果及成功日志并整体提交
+      alt 提交成功
+        Service --> Entry : 预约成功及编号
+      else 确认写入或提交失败
+        Service -> Store : 整体回滚，另存失败日志
+        Service --> Entry : 本次未成功，可重试
+      end
+    else 不满足新预约条件
+      Service -> Store : 结束事务，独立记失败日志
+      Service --> Entry : 返回具体原因（自有商品、本人已约、请刷新）
+    end
+  end
+  alt 来自 A
+    Entry --> BuyerA : 返回 A 的结果
+  else 来自 B
+    Entry --> BuyerB : 返回 B 的结果
+  end
+end
+
+legend bottom
+  A 先提交成功时，B 重读到商品已被预约，提示刷新。A 回滚时，B 仍按最新数据判断。
+  同一请求的重放继续指向原预约。提交成功后响应丢失时，重试返回已保存的结果。
+  有通知要求的交易动作也在同一事务中保存待发通知事件。
+endlegend
+@enduml

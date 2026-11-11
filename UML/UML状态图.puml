@@ -1,0 +1,106 @@
+@startuml
+!pragma layout smetana
+title 商品与预约状态图
+caption 需求依据 REQ-007～011、REQ-016～022、REQ-026～028
+
+skinparam defaultFontName Microsoft YaHei
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam backgroundColor #FFFFFF
+skinparam ArrowColor #456379
+skinparam state {
+  BackgroundColor #F0F6FA
+  BorderColor #456379
+  FontColor #193247
+  StartColor #456379
+}
+skinparam note {
+  BackgroundColor #F8FAFC
+  BorderColor #A4B4C0
+  FontColor #193247
+}
+
+state "商品" as Product {
+  state "草稿" as PDraft
+  state "待审核" as PReview
+  state "已驳回" as PRejected
+  state "已发布" as PPublished
+  state "已被预约" as PReserved #DBF2ED
+  state "已下架" as PWithdrawn
+  state "已售出" as PSold #DBF2ED
+  state "违规下架" as PBlocked #FFF1DC
+
+  [*] --> PDraft : 卖家保存草稿
+  PDraft --> PReview : 卖家提交合格资料
+  PReview --> PRejected : 管理员驳回并填写原因
+  PRejected --> PReview : 卖家修改后重新提交
+  PReview --> PPublished : 管理员审核通过
+  PPublished --> PReview : 核心信息或分类修改后提交重审
+  PPublished --> PWithdrawn : 卖家下架 [无有效预约]
+  PWithdrawn --> PReview : 卖家编辑后再次送审
+  PPublished --> PReserved : E1 其他买家预约成功
+  PReserved --> PPublished : E2 取消、拒绝或待确认超时
+  PReserved --> PSold : E3 预约完成
+  PReserved -[#B45309]-> PBlocked : E4 管理员违规下架
+  PPublished -[#B45309]-> PBlocked : E4 管理员违规下架
+  PBlocked --> PPublished : 卖家整改申诉且管理员审核通过
+
+  note left of PPublished
+    单改交易地点留痕，保持已发布。
+    核心信息或分类变更送审后暂停公开展示。
+  end note
+  note left of PReserved
+    E5 卖家确认后，商品继续占用。
+    有效预约期间禁止修改商品和卖家主动下架。
+    同一商品不可再建立其他预约。
+  end note
+  note right of PBlocked
+    E4 管理员必须填写违规原因。
+    草稿、待审核、已驳回和已下架
+    遇相同处置也进入此状态。
+    取消有效预约并通知双方。
+    恢复发布时不恢复旧预约。
+  end note
+  note left of PSold
+    售出后不进公共列表。
+    30 天内可访问公开详情，之后隐藏。
+    发现违规立即隐藏公开详情。
+    保留已售出事实及交易历史。
+  end note
+}
+
+state "预约" as Reservation {
+  state "待卖家确认" as RPending #DBF2ED
+  state "已确认" as RConfirmed #DBF2ED
+  state "已取消" as RCancelled
+  state "已拒绝" as RRejected
+  state "已完成" as RCompleted #DBF2ED
+
+  [*] --> RPending : E1 买家预约成功
+  RPending --> RConfirmed : E5 卖家确认，记录确认时间
+  RPending --> RCancelled : E2 买家取消\n或发起满 24 小时仍未处理时自动取消
+  RPending --> RRejected : E2 卖家拒绝
+  RConfirmed --> RCancelled : E2 卖家填写原因后取消
+  RConfirmed --> RCompleted : E3 线下交接后任一方完成\n或卖家确认满 10 天仍未完成时自动完成
+  RPending -[#B45309]-> RCancelled : E4 关联商品违规下架
+  RConfirmed -[#B45309]-> RCancelled : E4 关联商品违规下架
+
+  note right of RPending
+    待卖家确认和已确认都是有效预约。
+    同一商品同时至多有一条有效预约。
+  end note
+  note right of RConfirmed
+    买家不能单方面取消。
+    自动完成仅处理仍处于已确认的预约。
+  end note
+}
+
+Product -[hidden]right-> Reservation
+
+legend bottom
+  E1～E5 是联动事件编号。两侧同一事件在一次业务更新中保持一致。
+  E2 释放商品为已发布。E4 取消预约时商品保持违规下架。
+  卖家拒绝通知买家。24 小时自动取消或违规取消通知买卖双方。
+  已结束预约留作历史。买家取消与卖家确认竞争时，按服务端接收先后仅一个成功。
+endlegend
+@enduml

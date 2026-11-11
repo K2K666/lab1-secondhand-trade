@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.ruff_cache/
+var/
+*.sqlite*
+*.db
+*.zip
+实验报告.pdf

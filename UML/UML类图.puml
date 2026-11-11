@@ -1,0 +1,155 @@
+@startuml
+!pragma layout smetana
+title UML 类图 · 校园二手交易系统
+
+skinparam defaultFontName Microsoft YaHei
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam backgroundColor #FFFFFF
+skinparam classAttributeIconSize 0
+skinparam nodesep 32
+skinparam ranksep 45
+skinparam ArrowColor #52657B
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #52657B
+  HeaderBackgroundColor #EDF4FA
+  FontColor #20344B
+}
+skinparam package {
+  BackgroundColor #F7FAFD
+  BorderColor #98ADC2
+  FontColor #20344B
+}
+hide circle
+hide empty methods
+
+package "账号与商品" {
+  class "账号" as Account {
+    +账号ID
+    +手机号 {unique}
+    +昵称
+    +密码哈希
+    +权限种类
+    +首次改密标记
+  }
+  class "商品" as Product {
+    +商品ID
+    +标题／描述／价格
+    +交易地点
+    +商品状态
+    +内容版本
+    +首次／最近发布时间
+    +售出时间／公开隐藏标记
+    +可预约()
+    +可公开查看(入口, 当前时间)
+  }
+  class "分类" as Category {
+    +分类ID
+    +分类名称
+  }
+  class "商品图片" as Photo {
+    +图片ID
+    +文件引用
+    +格式／大小／顺序
+  }
+  Account "1" -- "0..*" Product : 发布
+  Product "0..*" -- "0..1" Category : 归类
+  Product "1" *-- "0..*" Photo : 展示资料
+}
+
+package "预约与交易" {
+  class "预约" as Reservation {
+    +预约ID
+    +预约状态
+    +发起／确认／结束时间
+    +结束原因
+    +完成操作者
+    +是否有效()
+    +可转换(动作, 操作者)
+  }
+  class "请求结果" as Receipt {
+    +账号ID／操作类型／请求键
+    +请求摘要
+    +结果码
+    +原预约ID
+  }
+  Receipt "0..*" --> "0..1" Reservation : 原操作结果
+}
+
+package "审核与治理" {
+  class "审核记录" as Review {
+    +审核ID
+    +送审版本／送审类型
+    +提交时间
+    +审核人ID／结果／原因
+    +处理时间
+  }
+  class "举报" as Report {
+    +举报ID
+    +举报人ID
+    +举报说明
+    +处理人ID／结果／时间
+  }
+  class "违规处置" as Violation {
+    +处置ID
+    +处理人ID／原因
+    +处置时间
+  }
+}
+
+package "运营与追溯" {
+  class "站内通知" as Notification {
+    +通知ID
+    +接收账号ID
+    +事件ID
+    +内容／创建时间
+  }
+  class "操作日志" as Audit {
+    +日志ID
+    +操作者ID（可空）
+    +对象类型及ID／商品ID（可空）
+    +动作／前后状态／结果
+    +IP／发生时间
+  }
+}
+
+Account "1" -- "0..*" Reservation : 发起
+Product "1" -- "0..*" Reservation : 全部预约
+Product "1" -- "0..*" Review : 送审及整改审核
+Product "1" -- "0..*" Report : 被举报
+Product "1" -- "0..*" Violation : 违规历史
+Account "1" -- "0..*" Notification : 接收
+Account "0..1" -- "0..*" Audit : 操作者
+
+note top of Account
+  普通账号按操作场景同时具备买家、卖家身份。
+  超级管理员受控创建管理员，首次登录先改密。
+  游客仅作为访问身份。
+end note
+
+note bottom of Product
+  草稿可暂缺分类和图片。送审时分类必填，实物图 1–9 张。
+  公开列表仅显示已发布商品。已售出 30 天内仅详情可见，
+  违规处置可提前关闭公开展示，成交历史仍保留。
+end note
+
+note right of Reservation
+  有效预约为待卖家确认或已确认。
+  每件商品最多一条有效预约（按商品ID唯一约束），
+  允许多条历史记录。取消、拒绝及完成均保留记录。
+  商品占用状态与预约在同一事务中更新。
+end note
+
+note bottom of Receipt
+  （账号ID、操作类型、请求键）唯一。
+  已处理请求重放返回原结果，原预约不改绑。
+  失败操作重试时重新校验权限与状态。
+end note
+
+legend bottom
+  主数据以唯一编号关联。昵称可重复。历史预约、审核处置和操作日志永久保留。
+  成功通知按事件和接收账号去重。统计按授权范围汇总已提交的数据。
+  需求依据 REQ-002–012、REQ-014–032、REQ-034–035
+endlegend
+@enduml
